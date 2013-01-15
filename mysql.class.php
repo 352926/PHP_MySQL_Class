@@ -17,6 +17,8 @@ class DB
     private $sql = '';
     private $logger = true;
     private $logpath = '';
+    private $tran = false;
+    private $begin = false;
 
     /**
      * @param $host 数据库主机
@@ -25,8 +27,9 @@ class DB
      * @param $database 数据库名
      * @param string $coding 数据库编码：GBK,UTF8,gb2312
      * @param bool $pconnect 永久链接/即时链接 默认即时链接
+     * @param bool $tran 开启事务，需要MySQL支持InnoDB。
      */
-    public function __construct($host, $user, $pwd, $database, $charset = "UTF8", $pconnect = false)
+    public function __construct($host, $user, $pwd, $database, $charset = "UTF8", $pconnect = false, $tran = false)
     {
         $this->host = $host;
         $this->user = $user;
@@ -34,6 +37,7 @@ class DB
         $this->database = $database;
         $this->pconnect = $pconnect;
         $this->charset = $charset;
+        $this->tran = $tran;
         $this->connect();
     }
 
@@ -51,6 +55,9 @@ class DB
             }
         }
         mysql_query("SET NAMES $this->charset");
+        if ($this->tran) {
+            $this->Begin();
+        }
     }
 
     function __destruct()
@@ -100,12 +107,9 @@ class DB
      * NOTICE:默认使用AND链接WHERE条件。如有特殊情况，请勿使用数组方式传入WHERE条件。可直接传入sql如" xx=oo OR oo=xx"
      * @return bool|array
      */
-    public function GetAll($arr = array())
+    public function GetAll(Array $arr, $commit = true, $debug = false)
     {
-        if (!isset($arr['table']) && empty($arr['table'])) {
-            if ($this->debug) {
-                $this->showErr("请传入查询的表");
-            }
+        if (empty($arr) || !isset($arr['table']) || empty($arr['table'])) {
             return false;
         }
         if (!isset($arr['fields']) && empty($arr['fields'])) {
@@ -133,6 +137,9 @@ class DB
 
         $sql = "SELECT %s FROM `%s` %s";
         $sql = sprintf($sql, $arr['fields'], $arr['table'], $arr['where']);
+        if ($debug) {
+            exit($sql);
+        }
         if ($this->logger) {
             $this->log($sql);
         }
@@ -146,7 +153,7 @@ class DB
         }
     }
 
-    public function Delete($table, $where, $safe = true, $debug = false)
+    public function Delete($table, $where, $safe = true, $commit = true, $debug = false)
     {
         $sql = "DELETE FROM %s %s";
         if ($where) {
@@ -156,18 +163,99 @@ class DB
         if ($debug) {
             exit($sql);
         }
+        if ($this->logger) {
+            $this->log($sql);
+        }
         return $this->Query($sql);
     }
 
     /**
-     * @param array $fields
      * @param array $data
+     * $data = array("table"=>array("oo"=>"xx","xx"=>"oo"));
+     * @param bool $commit
      * @param bool $debug
      */
-    public function InsRow(Array $fields, Array $data, $debug = false)
+    public function InsRow(Array $data, $commit = true, $debug = false)
     {
-        if (!empty($fields) && !empty($data) && key($data)) {
-            //$sql = "INSERT INTO %s ()";
+        if (!empty($data) && key($data)) {
+            $content = array();
+            $table = key($data);
+            if (is_array($data[$table]) && !empty($data[$table])) {
+                $fields = array();
+                foreach ($data[$table] as $k => $v) {
+                    $content[] = "'{$v}'";
+                    $fields[] = "`{$k}`";
+                }
+                if (!empty($fields) && !empty($content)) {
+                    $sql = sprintf("INSERT INTO %s (%s) VALUES (%s)", $table, implode(",", $fields), implode(",", $content));
+                    if ($debug) {
+                        exit($sql);
+                    }
+                    return $this->Query($sql);
+                } else {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+    }
+
+    public function InsMulRow(Array $array, $commit = true, $debug = false)
+    {
+        if (
+            empty($array) || !isset($array['table']) || !isset($array['fields']) || !is_array($array['fields'])
+            || !isset($array['data']) || !is_array($array['data'] || !empty($array['data']))
+        ) {
+            return false;
+        }
+        $table = $array['table'];
+        $fields = $array['fields'];
+        $data = $array['data'];
+        $item = array();
+        foreach ($data as $val) {
+            if (!empty($val)) {
+                $item[] = "'" . implode("','", $val) . "'";
+            }
+        }
+        $sql = sprintf("INSERT INTO %s (`%s`) VALUES (%s)", $table, implode("`,`", $fields), implode("),("));
+        if ($debug) {
+            exit($sql);
+        }
+        $this->Query($sql);
+    }
+
+    public function Begin()
+    {
+        if ($this->tran) {
+            if (!$this->begin) {
+                return $this->ExeSql("COMMIT");
+            } else {
+                return true;
+            }
+        } else {
+            return false;
+        }
+    }
+
+    public function Commit()
+    {
+        if ($this->tran) {
+            if (!$this->begin) {
+                $this->Begin();
+            }
+            return $this->ExeSql("COMMIT");
+        } else {
+            return false;
+        }
+    }
+
+    public function Back()
+    {
+        if ($this->tran) {
+            return $this->ExeSql("ROLLBACK");
+        } else {
+            return false;
         }
     }
 
