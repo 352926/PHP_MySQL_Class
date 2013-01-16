@@ -31,7 +31,7 @@ class DB
      * @param bool $pconnect 永久链接/即时链接 默认即时链接
      * @param bool $tran 开启事务，需要MySQL支持InnoDB。
      */
-    function __construct($host, $user, $pwd, $database, $pre, $charset = "UTF8", $pconnect = false, $tran = false)
+    function __construct($host, $user, $pwd, $database, $pre = "", $charset = "UTF8", $pconnect = false, $tran = false)
     {
         $this->host = $host;
         $this->user = $user;
