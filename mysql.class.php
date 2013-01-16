@@ -44,6 +44,13 @@ class DB
         $this->connect();
     }
 
+    public static function getInstance($host, $user, $pwd, $database, $pre, $charset = "UTF8", $pconnect = false)
+    {
+        $class = __CLASS__;
+        $db = new $class($host, $user, $pwd, $database, $pre, $charset, $pconnect);
+        return $db;
+    }
+
     private function connect()
     {
         $connect = $this->pconnect ? "mysql_pconnect" : "mysql_connect";
